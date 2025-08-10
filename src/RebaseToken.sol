@@ -9,7 +9,7 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     error InterestRateCannotBeIncreased(uint256 _newInterestRate, uint256 _currentInterestRate);
 
     uint256 private constant PRECISION_FACTOR = 1e18;
-    uint256 public interestRate = 5e16; // 5%
+    uint256 public interestRate = 5e10; // 5%
     bytes32 private constant MINT_AND_BURN_ROLE = keccak256("MINT_AND_BURN_ROLE");
     mapping(address => uint256) public userInterestRate; // user interest rate
     mapping(address => uint256) public userLastUpdatedTimestamp; // user last updated timestamp
@@ -119,8 +119,23 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         returns (uint256 linearInterestRate)
     {
         // calculate the interest rate since the last update
-        uint256 timeElapsed = block.timestamp - userLastUpdatedTimestamp[_user];
-        linearInterestRate = (PRECISION_FACTOR + (userInterestRate[_user] * timeElapsed));
+        uint256 timeElapsed;
+        if (userLastUpdatedTimestamp[_user] == 0) {
+            // First time user interacts, no interest accumulated yet
+            timeElapsed = 0;
+        } else {
+            timeElapsed = block.timestamp - userLastUpdatedTimestamp[_user];
+        }
+
+        // Calculate annual interest rate: interestRate is in basis points (1e10 = 100%)
+        // For 5% annual rate: 5e10 / 1e10 = 0.05
+        // Convert to per-second rate: 0.05 / (365 * 24 * 3600) = 0.05 / 31536000
+        // Use PRECISION_FACTOR (1e27) for precision
+        uint256 annualRate = userInterestRate[_user];
+        uint256 perSecondRate = (annualRate * PRECISION_FACTOR) / (365 days);
+
+        // Calculate accumulated interest: 1 + (rate * time)
+        linearInterestRate = PRECISION_FACTOR + (perSecondRate * timeElapsed);
     }
 
     /**
@@ -148,9 +163,6 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
      * @param _amount The amount of tokens to burn
      */
     function burn(address _from, uint256 _amount) external onlyRole(MINT_AND_BURN_ROLE) {
-        if (_amount == type(uint256).max) {
-            _amount = balanceOf(_from);
-        }
         _mintAccruedInterest(_from);
         _burn(_from, _amount);
     }

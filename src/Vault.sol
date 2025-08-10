@@ -15,19 +15,15 @@ contract Vault {
         REBASE_TOKEN = _rebaseToken;
     }
 
-    receive() external payable {
-        deposit();
-    }
+    receive() external payable {}
 
-    fallback() external payable {
-        deposit();
-    }
+    fallback() external payable {}
 
     /**
      * @notice Deposit ETH into the vault
      * @dev The ETH is minted as rebase tokens
      */
-    function deposit() public payable {
+    function deposit() external payable {
         IRebaseToken(REBASE_TOKEN).mint(msg.sender, msg.value);
         emit Deposit(msg.sender, msg.value);
     }
@@ -38,6 +34,9 @@ contract Vault {
      * @param _amount The amount of rebase tokens to redeem
      */
     function redeem(uint256 _amount) external {
+        if (_amount == type(uint256).max) {
+            _amount = IRebaseToken(REBASE_TOKEN).balanceOf(msg.sender);
+        }
         IRebaseToken(REBASE_TOKEN).burn(msg.sender, _amount);
         // transfer the ETH
         (bool success,) = payable(msg.sender).call{value: _amount}("");
